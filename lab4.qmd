@@ -1,9 +1,13 @@
 ---
 title: 'Lab 4: LTER Network Data'
+author: "Sean Pearson"
+date: "2025-04-06"
 format:
    html:
     code-fold: true
     toc: true
+execute: 
+  echo: true
 subtitle: 'Introduction to Statistics in R'
 ---
 
@@ -324,13 +328,57 @@ Each question requires you to carry out a statistical analysis to test some hypo
 
 **1.** Conduct a chi-square test similar to the one carried out above, but test for a relationship between forest type (`section`) and channel unit (`unittype`) for *Coastal giant salamander* abundance. *Keep all unittypes* instead of filtering any like we did for the Cutthroat trout (10 pts.)
 
+```{r}
+# Clean and filter data
+sally_chi <- and_vertebrates |>
+  filter(species == "Coastal giant salamander") |>
+  drop_na(section, unittype)
+```
+
+```{r}
+# Create contingency table
+sally_table <- table(sally_chi$section, sally_chi$unittype)
+```
+
+```{r}
+# Run Chi-square test
+chisq.test(sally_table)
+```
+###### Answer: A chi-square test revealed a significant relationship between forest type and channel unit for Coastal giant salamander abundance (x-squared = 200.71, df = 5, p < 0.001). This suggests that salamander abundance varies by habitat type in different forest conditions.
+
 <br>
 
 **2.** Test the hypothesis that there is a significant difference in species biomass between clear cut and old growth forest types for the *Coastal Giant salamander*. (10 pts.)
 
+```{r}
+# Filter and clean salamander data
+sally_clean <- and_vertebrates |> 
+  filter(species == "Coastal giant salamander") |> 
+  drop_na(weight_g, section)
+```
+
+```{r}
+# Log-transform weights
+t.test(log(weight_g) ~ section, data = sally_clean, var.equal = TRUE)
+```
+###### Answer: A two sample t-test showed a significant difference in Coastal Giant Salamander biomass between clear cut and old growth forest sections (t = 10.09, df = 6336, p < 0.001). The mean log-transformed weight was higher in clear cut forests (1.83) compared to old growth forests (1.58). This suggests salamanders were significantly larger in clear cut areas.
+
 <br>
 
 **3.** Test the correlation between body length (snout to fork length) and body mass for *Cutthroat trout*. (Hint: run `?and_vertebrates` to find which length variable represents snout to fork length) (10 pts.)
+
+```{r}
+# Clean trout data
+trout_corr <- and_vertebrates |> 
+  filter(species == "Cutthroat trout") |> 
+  drop_na(length_1_mm, weight_g)
+```
+
+```{r}
+# correlation test with log transform
+cor.test(log(trout_corr$length_1_mm), log(trout_corr$weight_g))
+```
+###### Answer: A correlation test showed a strong, positive relationship between body length and weight in Cutthroat trout (r = 0.99, p < 0.001). This result supports the hypothesis that longer individuals also tend to weigh more.
 
 <br> <br>
 
@@ -555,9 +603,67 @@ In your assignment, you will perform a multiple linear regression using variable
 
 1.  **After** completing the ANOVA test (and post-hoc Tukey's HSD) above to test for significant differences in crab size among 3 different sites: **1)** Create a boxplot showing the carapace width for each site where sites are *ordered by latitude* and **2)** report the findings of the statistical test as you would in a scientific paper. *Include both the code to create the boxplot and an image of the figure.* (10 pts.)
 
+```{r}
+# Subset data to 3 sites
+pie_sites <- pie_crab |> 
+  filter(site %in% c("GTM", "DB", "PIE"))
+```
+
+```{r}
+# Create a factor that orders sites by mean latitude
+site_order <- pie_sites |> 
+  group_by(site) |> 
+  summarize(mean_lat = mean(latitude)) |> 
+  arrange(mean_lat) |> 
+  pull(site)
+```
+
+```{r}
+# Reorder factor levels in site column
+pie_sites$site <- factor(pie_sites$site, levels = site_order)
+```
+
+```{r}
+# Create boxplot
+ggboxplot(pie_sites, x = "site", y = "size", fill = "site") +
+  geom_jitter(width = 0.1, alpha = 0.4) +
+  theme_minimal() +
+  labs(title = "Carapace Width by Site (Ordered by Latitude)",
+       x = "Site", y = "Carapace Width (mm)")
+```
+###### Answer: There was a significant difference in crab size among the three sites (GTM, DB, and PIE) as shown by an ANOVA test (p < 0.001). The Tukey post-hoc test showed that all sites were significantly different from each other, with crabs being smallest at GTM, medium at DB, and largest at PIE.
+
 2.  Conduct a simple linear regression for the effect of `water_temp_sd` (a measure reflecting annual variation in water temperature) on carapace width. Report your findings (include code *and* a sentence reporting the results) AND create a plot with a line of best fit. *Include both the code to create the plot and an image of the figure*. (10 pts).
 
+```{r}
+lm_water_sd <- lm(size ~ water_temp_sd, data = pie_crab)
+summary(lm_water_sd)
+```
+
+```{r}
+# Plot
+ggscatter(pie_crab, x = "water_temp_sd", y = "size",
+          add = "reg.line", conf.int = TRUE,
+          color = "#0072B2", alpha = 0.6) +
+  labs(title = "Effect of Water Temp SD on Crab Size",
+       x = "Water Temp SD", y = "Carapace Width (mm)")
+```
+###### Answer: I ran a linear regression to test the effect of water temperature variability on crab size. The p-value was 0.527 (p > 0.05), so we found no significant relationship between water temperature SD and carapace width. The plot also shows no clear trend in crab size across different temperature values.
+
 3.  Conduct a multiple linear regression for the effects of `latitude`, `air_temp_sd`, and `water_temp_sd` on carapace width. **First** check for correlations among the three predictor variables (and report the correlation table) and **second** report your findings from the multiple linear regression (code *and* a sentence reporting the results). (10 pts.)
+
+```{r}
+pie_crab |>
+  select(latitude, air_temp_sd, water_temp_sd) |>
+  cor()
+```  
+ 
+```{r}  
+mlm <- lm(size ~ latitude + air_temp_sd + water_temp_sd, data = pie_crab)
+summary(mlm)  
+```
+###### Answer: A multiple linear regression showed that latitude had a significant effect on crab size (p < 0.001), while air temperature SD (p = 0.17) and water temperature SD (p = 0.33) did not. The overall model was significant (p < 0.001) and explained about 35% of the variation in crab size (r-squared = 0.35).
+
 
 ## Acknowledgements
 
